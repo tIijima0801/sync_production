@@ -1,18 +1,18 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
-class sensor_data:
+class SensorData:
     # --- メンバ変数一覧 ---
-    # filename:センサデータのファイル名
-    # header: センサデータの1行目
-    # col_time: 時間（一番左の列）
-    # col_x: x軸 （2番目の列）
-    # col_y: y軸 （4番目の列）
-    # col_z: z軸 （3番目の列）
+    filename = []
+    header = []
+    column_time = []
+    column_x = []
+    column_y = []
+    column_z = []
 
     # --- メソッド一覧 ---
     # __init__
-    # edit_sign
-    # static change_sign_of_list
+    # change_sign
     # edit_filter
     # static moving_average_filter
     # edit_trim
@@ -21,73 +21,83 @@ class sensor_data:
 
     # 引数として与えられた名前のセンサデータファイルを読み込む
     def __init__(self, input_filename):
-        self.filename = input_filename
-        self.col_time, self.col_x, self.col_y, self.col_z = [], [], [], []
+        time = []
+        x = []
+        y = []
+        z = []
 
+        self.filename = input_filename
         in_file = open(self.filename, "r")
 
         self.header = in_file.readline()
-        # windowsの改行コードに変更
-        self.header.replace("\n" or "\r", "\r\n")
+        self.header = self.header.replace("\n" or "\r", "")
 
         lines = in_file.readlines()
-
         for line in lines:
             line = line.replace("\n" or "\r", "")
             line = line.split(",")
-            self.col_time.append(int(line[0]))
-            self.col_x.append(float(line[1]))
-            self.col_z.append(float(line[2]))
-            self.col_y.append(float(line[3]))
+            time.append(int(line[0]))
+            x.append(float(line[1]))
+            y.append(float(line[3]))
+            z.append(float(line[2]))
+
+        self.column_time = np.array(time, dtype=int)
+        self.column_x = np.array(x, dtype=float)
+        self.column_y = np.array(y, dtype=float)
+        self.column_z = np.array(z, dtype=float)
 
     # 指定された軸の符号を変更
-    def edit_sign(self, x, y, z):
-        if x:
-            self.col_x = sensor_data.change_sign_of_list(self.col_x)
-        if y:
-            self.col_y = sensor_data.change_sign_of_list(self.col_y)
-        if z:
-            self.col_z = sensor_data.change_sign_of_list(self.col_z)
-
-    # 受け取った1次元配列の符号を反転する
-    @staticmethod
-    def change_sign_of_list(column):
-        for i in range(len(column)):
-            column[i] *= -1
-        return column
+    def change_sign(self, x_bool, y_bool, z_bool):
+        if x_bool:
+            self.column_x *= -1
+        if y_bool:
+            self.column_y *= -1
+        if z_bool:
+            self.column_z *= -1
 
     # センサ全体に移動平均フィルタをかける
-    def edit_filter(self):
-        self.col_x = sensor_data.moving_average_filter(self.col_x)
-        self.col_y = sensor_data.moving_average_filter(self.col_y)
-        self.col_z = sensor_data.moving_average_filter(self.col_z)
+    def moving_average_filter(self):
+        self.column_x = SensorData.moving_average_filter_list(self.column_x)
+        self.column_y = SensorData.moving_average_filter_list(self.column_y)
+        self.column_z = SensorData.moving_average_filter_list(self.column_z)
 
     # 受け取った1次元配列に移動平均フィルタをかける
     @staticmethod
-    def moving_average_filter(column):
-        N = 9
-        data = np.array(column)
-        ave = np.convolve(data, np.ones(N) / float(N), 'same')
+    def moving_average_filter_list(column):
+        n = 20
+        ave = np.convolve(column, np.ones(n) / float(n), 'same')
         for i in range(len(ave)):
             ave[i] = round(ave[i], 4)
         return ave
 
     # 指定した時間でセンサデータをトリミング
-    def edit_trim(self, begin_sec, end_sec):
-        begin_ms, end_ms = sensor_data.to_millisecond(begin_sec), sensor_data.to_millisecond(end_sec)
-        new_col_time, new_col_x, new_col_y, new_col_z = [], [], [], []
+    def trim_data(self, begin_sec, end_sec):
+        begin_ms, end_ms = SensorData.to_millisecond(begin_sec), SensorData.to_millisecond(end_sec)
+        new_column_time = np.array([], dtype=int)
+        new_column_x = new_column_y = new_column_z = np.array([], dtype=float)
 
-        for i in range(len(self.col_time)):
-            if begin_ms <= self.col_time[i] <= end_ms:
-                new_col_time.append(int(self.col_time[i] - begin_ms))
-                new_col_x.append(float(self.col_x[i]))
-                new_col_y.append(float(self.col_y[i]))
-                new_col_z.append(float(self.col_z[i]))
+        for i in range(len(self.column_time)):
+            if begin_ms <= self.column_time[i] <= end_ms:
+                new_column_time = np.append(new_column_time, self.column_time[i] - int(begin_ms))
+                new_column_x = np.append(new_column_x, self.column_x[i])
+                new_column_y = np.append(new_column_y, self.column_y[i])
+                new_column_z = np.append(new_column_z, self.column_z[i])
+            elif self.column_time[i] > end_ms:
+                break
 
-        self.col_time = new_col_time
-        self.col_x = new_col_x
-        self.col_y = new_col_y
-        self.col_z = new_col_z
+        self.column_time = new_column_time
+        self.column_x = new_column_x
+        self.column_y = new_column_y
+        self.column_z = new_column_z
+
+    def plot_data(self):
+        plt.figure(figsize=(7, 4))
+        plt.plot(self.column_x, color='black')
+        plt.xlabel(' data num ')
+        plt.ylabel(' amplitude ')
+        plt.ylim(-1.5, 1.5)
+        # plt.xlim(2000, 3000)
+        plt.show()
 
     # 入力された秒数をミリ秒にして返す
     @staticmethod
@@ -98,12 +108,12 @@ class sensor_data:
     def output_to_file(self):
         out_file = open("edited_" + self.filename, "w")
 
-        out_file.write(self.header)
-        for i in range(len(self.col_time)):
+        out_file.write(self.header + "\r\n")
+        for i in range(len(self.column_time)):
             row = "{},{},{},{}\r\n".format(
-                self.col_time[i],
-                self.col_x[i],
-                self.col_z[i],
-                self.col_y[i]
+                self.column_time[i],
+                self.column_x[i],
+                self.column_z[i],
+                self.column_y[i]
             )
             out_file.write(row)
